@@ -36,8 +36,13 @@ func main() {
 
 	wp.Start(ctx)
 	wp.AddWorkers(1)
+	wp.AddWorkers(1)
+
+	wp.RemoveWorkers(10)
 
 	wp.AddJob(job{"1"})
+
+	wp.AddWorkers(1)
 
 	for result := range wp.Subscribe() {
 		fmt.Println("result received", result.JobID, result.Err)
