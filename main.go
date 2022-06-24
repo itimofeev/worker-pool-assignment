@@ -72,6 +72,7 @@ func (j job) ID() string {
 }
 
 func (j job) Do() error {
+	fmt.Println(j.id, "started")
 	time.Sleep(time.Second)
 	fmt.Println(j.id, "completed")
 	return nil
