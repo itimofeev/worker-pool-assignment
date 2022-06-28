@@ -21,7 +21,6 @@ type Pool struct {
 	workers map[string]worker
 
 	idGenerator *IDGenerator
-	stopping    bool
 	stoppedCh   chan struct{}
 }
 
@@ -77,7 +76,6 @@ func (p *Pool) sendResultToSubscribers(result JobResult) {
 func (p *Pool) waitForContextClose() {
 	<-p.ctx.Done()
 	fmt.Println("ctx done, stopping worker pool")
-	p.stopping = true
 
 	close(p.jobCh)
 
@@ -134,14 +132,11 @@ func (p *Pool) GetStoppedChan() chan struct{} {
 }
 
 func (p *Pool) AddJob(job Job) {
-	if p.stopping {
-		return
-	}
 	select {
 	case p.jobCh <- job:
 		fmt.Println("job added", job.ID())
 	default:
-		fmt.Println("!!!JOB NOT ADDED!!!")
+		fmt.Println("!!!JOB NOT ADDED!!! Whether pool is stopping and jobCh is closed or buffer in jobCh is overflown")
 	}
 }
 

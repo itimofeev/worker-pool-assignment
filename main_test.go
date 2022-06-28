@@ -10,6 +10,27 @@ import (
 	"github.com/itimofeev/worker-pool-assignment/worker"
 )
 
+func TestWorkerSimple(t *testing.T) {
+	wp := worker.NewPool()
+	ctx, cancel := context.WithCancel(context.Background())
+	wp.Start(ctx)
+
+	tick := time.NewTicker(time.Second / 10)
+
+	go func() {
+		for range tick.C {
+			wp.AddWorkers(2)
+		}
+	}()
+
+	time.Sleep(time.Second * 5)
+
+	cancel()
+	tick.Stop()
+	<-wp.GetStoppedChan()
+	fmt.Println("worker pool stopped")
+}
+
 func TestWorkerPool(t *testing.T) {
 	wp := worker.NewPool()
 	ctx, cancel := context.WithCancel(context.Background())
