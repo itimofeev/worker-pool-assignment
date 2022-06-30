@@ -11,28 +11,22 @@ import (
 	"github.com/itimofeev/worker-pool-assignment/worker"
 )
 
-type Job interface {
-	ID() string
-	Do() error
-}
-
-type JobResult struct {
-	JobID string
-	Err   error
-}
-
 type WorkerPool interface {
 	Start(ctx context.Context)
 	AddWorkers(count int)
 	RemoveWorkers(count int)
-	AddJob(job Job)
-	Subscribe() chan JobResult
+	AddJob(job worker.Job)
+	Subscribe() chan worker.JobResult // todo написать про то, что можно receive only channel
+}
+
+func newPool() WorkerPool {
+	return worker.NewPool()
 }
 
 func main() {
 	ctx := contextWithSigterm(context.Background())
 
-	wp := worker.NewPool()
+	wp := newPool()
 
 	wp.Start(ctx)
 	wp.AddWorkers(1)
@@ -41,6 +35,7 @@ func main() {
 	wp.RemoveWorkers(10)
 
 	wp.AddJob(job{"1"})
+	wp.AddJob(job{"2"})
 
 	wp.AddWorkers(1)
 
@@ -49,6 +44,7 @@ func main() {
 	}
 }
 
+// contextWithSigterm returns context that cancelled when user press Ctrl+C
 func contextWithSigterm(ctx context.Context) context.Context {
 	ctxWithCancel, cancel := context.WithCancel(ctx)
 	go func() {

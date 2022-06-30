@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 )
 
+// IDGenerator generates unique integers sequence and returns each as string
 type IDGenerator struct {
 	id int64
 }
