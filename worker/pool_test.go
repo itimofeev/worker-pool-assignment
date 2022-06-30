@@ -1,76 +1,84 @@
-package main
+package worker
 
 import (
 	"context"
 	"fmt"
 	"math/rand"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/itimofeev/worker-pool-assignment/worker"
 	"github.com/stretchr/testify/require"
 )
 
-func TestWorkerSimple(t *testing.T) {
-	wp := worker.NewPool()
+func TestWorkerPool_RunningWorkersStopped(t *testing.T) {
+	wp := NewPool()
 	ctx, cancel := context.WithCancel(context.Background())
 	wp.Start(ctx)
 
 	tick := time.NewTicker(time.Second / 10)
+	defer tick.Stop()
 
 	go func() {
-		for range tick.C {
-			wp.AddWorkers(2)
+		for {
+			select {
+			case <-tick.C:
+				wp.AddWorkers(2)
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 
 	time.Sleep(time.Second * 5)
 
 	cancel()
-	tick.Stop()
 	<-wp.GetStoppedChan()
 	fmt.Println("worker pool stopped")
+	require.Zero(t, wp.WorkersCount())
 }
 
-func TestWorkerCompleteAllJobs(t *testing.T) {
-	wp := worker.NewPool()
+func TestWorkerPool_GracefullyCompletesAllJobs(t *testing.T) {
+	wp := NewPool()
 	ctx, cancel := context.WithCancel(context.Background())
 	wp.Start(ctx)
-	idGen := worker.IDGenerator{}
-	const jobsCount = 1
+	jobsIDGen := IDGenerator{}
+	const jobsCount = 10
 
 	for i := 0; i < jobsCount; i++ {
-		wp.AddJob(job{idGen.Next()})
+		wp.AddJob(job{jobsIDGen.Next()})
 	}
 
 	gotResults := int64(0)
+	subscribeChClosed := make(chan struct{})
 	go func() {
 		subscribeCh := wp.Subscribe()
 		for range subscribeCh {
 			fmt.Println("got result")
 			atomic.AddInt64(&gotResults, 1)
 		}
+		close(subscribeChClosed)
 	}()
 
-	wp.AddWorkers(1)
-	time.Sleep(time.Second)
+	wp.AddWorkers(2)
+	runtime.Gosched() // ensure, that worker started and received job before we cancel context
 	cancel()
 
 	<-wp.GetStoppedChan()
-	time.Sleep(time.Second)
+	<-subscribeChClosed
 	require.EqualValues(t, jobsCount, atomic.LoadInt64(&gotResults))
+	require.Zero(t, wp.WorkersCount())
 }
 
 func TestWorkerPool(t *testing.T) {
-	wp := worker.NewPool()
+	wp := NewPool()
 	ctx, cancel := context.WithCancel(context.Background())
 	wp.Start(ctx)
 	addWorkersTicker := time.NewTicker(time.Second)
 	removeWorkersTicker := time.NewTicker(time.Second)
 	jobTicker := time.NewTicker(time.Second / 10)
-	testTimer := time.NewTimer(time.Second * 1)
-	idGen := worker.IDGenerator{}
+	idGen := IDGenerator{}
 
 	addedJobsCount := int64(0)
 	gotResults := int64(0)
@@ -103,27 +111,53 @@ func TestWorkerPool(t *testing.T) {
 		}
 	}()
 
+	jobTickerStopCh := make(chan struct{})
+	jobTickerStoppedCh := make(chan struct{})
 	go func() {
+		defer close(jobTickerStoppedCh)
 		for {
 			select {
 			case <-jobTicker.C:
 				wp.AddJob(job{idGen.Next()})
 				atomic.AddInt64(&addedJobsCount, 1)
-			case <-testTimer.C:
-				cancel()
+			case <-jobTickerStopCh:
 				return
 			}
 		}
 	}()
 
+	subscribeChClosed := make(chan struct{})
 	go func() {
 		for range wp.Subscribe() {
 			atomic.AddInt64(&gotResults, 1)
 		}
+		close(subscribeChClosed)
 	}()
 
+	time.Sleep(time.Second * 10)
+	close(jobTickerStopCh)
+	jobTicker.Stop()
+	<-jobTickerStoppedCh
+	cancel()
+
 	<-wp.GetStoppedChan()
+	<-subscribeChClosed
 	fmt.Println("worker pool stopped")
 
 	require.Equal(t, atomic.LoadInt64(&addedJobsCount), atomic.LoadInt64(&gotResults))
+}
+
+type job struct {
+	id string
+}
+
+func (j job) ID() string {
+	return j.id
+}
+
+func (j job) Do() error {
+	fmt.Println(j.id, "started")
+	time.Sleep(time.Second)
+	fmt.Println(j.id, "completed")
+	return nil
 }

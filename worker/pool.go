@@ -23,7 +23,7 @@ type Pool struct {
 	stopping   bool
 	stoppingMu sync.Mutex
 
-	workers map[string]worker
+	workers map[string]*worker
 
 	idGenerator *IDGenerator
 	stoppedCh   chan struct{}
@@ -44,7 +44,7 @@ func NewPool() *Pool {
 		jobCh:                make(chan Job, 100),
 		resultCh:             make(chan JobResult, 100),
 		idGenerator:          &IDGenerator{},
-		workers:              make(map[string]worker),
+		workers:              make(map[string]*worker),
 		stoppedCh:            make(chan struct{}),
 		notifyWorkerClosedCh: make(chan *worker),
 		fanoutFinishedCh:     make(chan struct{}),
@@ -107,7 +107,7 @@ func (p *Pool) waitForContextClose() {
 func (p *Pool) AddWorkers(count int) {
 	for i := 0; i < count; i++ {
 		workerCtx, workerCancel := context.WithCancel(context.Background()) //todo add doc
-		w := worker{
+		w := &worker{
 			id:             p.idGenerator.Next(),
 			workerCtx:      workerCtx,
 			workerCancel:   workerCancel,
@@ -142,7 +142,7 @@ func (p *Pool) RemoveWorkers(count int) {
 			break
 		}
 		i++
-		w.workerCancel()
+		w.stop()
 	}
 }
 
@@ -155,11 +155,15 @@ func (p *Pool) AddJob(job Job) {
 	defer p.stoppingMu.Unlock()
 
 	if p.stopping {
-		fmt.Println("!!!JOB NOT ADDED!!! Whether pool is stopping and jobCh is closed or buffer in jobCh is overflown")
+		fmt.Println("!!!JOB NOT ADDED!!! Pool is stopping")
 		return
 	}
-	p.jobCh <- job
-	fmt.Println("job added", job.ID())
+	select {
+	case p.jobCh <- job:
+		fmt.Println("job added", job.ID())
+	default:
+		fmt.Println("!!!JOB NOT ADDED!!! buffer in jobCh is overflown")
+	}
 }
 
 func (p *Pool) Subscribe() chan JobResult {
