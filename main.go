@@ -16,7 +16,7 @@ type WorkerPool interface {
 	AddWorkers(count int)
 	RemoveWorkers(count int)
 	AddJob(job worker.Job)
-	Subscribe() chan worker.JobResult // todo написать про то, что можно receive only channel
+	Subscribe() chan worker.JobResult
 }
 
 func newPool() WorkerPool {

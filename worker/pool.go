@@ -40,10 +40,18 @@ type JobResult struct {
 	Err   error
 }
 
+func NewPoolWithBufferSizes(jobsBufferSize, resultsBufferSize int) *Pool {
+	return newPool(jobsBufferSize, resultsBufferSize)
+}
+
 func NewPool() *Pool {
+	return newPool(100, 100)
+}
+
+func newPool(jobsBufferSize, resultsBufferSize int) *Pool {
 	return &Pool{
-		jobsCh:               make(chan Job, 100),
-		resultsCh:            make(chan JobResult, 100),
+		jobsCh:               make(chan Job, jobsBufferSize),
+		resultsCh:            make(chan JobResult, resultsBufferSize),
 		workersIDGenerator:   &IDGenerator{},
 		workers:              make(map[string]*worker),
 		poolStoppedCh:        make(chan struct{}),
@@ -55,7 +63,6 @@ func NewPool() *Pool {
 // Start saves context in pool and starts internal go routines.
 // Using pool without calling to Start will results in incorrect job processing.
 // Consequent calls to start after first one will not have effect.
-// todo написать, что лучше бы в конструкторе передавали
 func (p *Pool) Start(ctx context.Context) {
 	p.initOnce.Do(func() {
 		p.initPool(ctx)
@@ -65,15 +72,13 @@ func (p *Pool) Start(ctx context.Context) {
 func (p *Pool) AddWorkers(count int) {
 	p.stoppingMu.Lock()
 	if p.stopping {
-		fmt.Println("!!!JOB NOT ADDED!!! Pool is stopping")
+		fmt.Println("!!!WORKERS NOT ADDED!!! Pool is stopping")
 		return
 	}
 	p.stoppingMu.Unlock()
 
 	for i := 0; i < count; i++ {
 		w := newWorker(p.workersIDGenerator.Next(), p.jobsCh, p.resultsCh, p.notifyWorkerClosedCh)
-
-		// todo add check for stopping
 
 		// adds worker to workersMap
 		p.workersMu.Lock()
@@ -108,14 +113,14 @@ func (p *Pool) AddJob(job Job) {
 	defer p.stoppingMu.Unlock()
 
 	if p.stopping {
-		fmt.Println("!!!JOB NOT ADDED!!! Pool is stopping")
+		fmt.Println("!!!JOBS NOT ADDED!!! Pool is stopping")
 		return
 	}
 	select {
 	case p.jobsCh <- job:
 		fmt.Println("job added", job.ID())
 	default:
-		fmt.Println("!!!JOB NOT ADDED!!! buffer in jobsCh is overflown")
+		fmt.Println("!!!JOBS NOT ADDED!!! buffer in jobsCh is overflown")
 	}
 }
 
@@ -131,8 +136,7 @@ func (p *Pool) Subscribe() chan JobResult {
 	return subscribedCh
 }
 
-// GetStoppedChan returns chan that closed when pool gracefully stopped
-// todo написать в доке, что это graceful stop
+// GetStoppedChan returns chan that closed when pool gracefully shuts down
 func (p *Pool) GetStoppedChan() chan struct{} {
 	return p.poolStoppedCh
 }

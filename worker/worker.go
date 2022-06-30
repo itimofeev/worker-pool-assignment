@@ -37,7 +37,11 @@ func (w *worker) run() {
 		w.notifyClosedCh <- w
 	}()
 
-	// todo add defer catching panic
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println("Job caused in panic, worker", w.id, "stopped")
+		}
+	}()
 
 labelFor:
 	for {

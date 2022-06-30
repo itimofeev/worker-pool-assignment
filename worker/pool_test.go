@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestWorkerPool_RunningWorkersStopped проверяет, что все воркеры завершаются при остановке пула
 func TestWorkerPool_RunningWorkersStopped(t *testing.T) {
 	wp := NewPool()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -39,6 +40,7 @@ func TestWorkerPool_RunningWorkersStopped(t *testing.T) {
 	require.Zero(t, wp.WorkersCount())
 }
 
+// TestWorkerPool_GracefullyCompletesAllJobs проверяет, что все задачи завершаются после остановки пула
 func TestWorkerPool_GracefullyCompletesAllJobs(t *testing.T) {
 	wp := NewPool()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -71,6 +73,7 @@ func TestWorkerPool_GracefullyCompletesAllJobs(t *testing.T) {
 	require.Zero(t, wp.WorkersCount())
 }
 
+// TestWorkerPool проверяет всё - и добавление воркеров, и удалени, и добавление задач в асинхронном режиме. В конце убеждается, что пул остановился и все добавленные задачи выполнены.
 func TestWorkerPool(t *testing.T) {
 	wp := NewPool()
 	ctx, cancel := context.WithCancel(context.Background())
