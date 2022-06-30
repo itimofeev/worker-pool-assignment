@@ -18,6 +18,8 @@ func (w *worker) run() {
 	fmt.Println("worker", w.id, "started")
 	defer fmt.Println("worker", w.id, "stopped")
 
+	// todo add defer catching panic
+
 labelFor:
 	for {
 		select {
@@ -32,6 +34,7 @@ labelFor:
 			}
 
 		case <-w.workerCtx.Done():
+			fmt.Println("worker", w.id, "ctx done")
 			break labelFor
 		}
 	}
